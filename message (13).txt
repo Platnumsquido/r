@@ -1,0 +1,1961 @@
+if not game:IsLoaded() then game.Loaded:Wait() end
+
+
+local Services = setmetatable({}, {__index = function(Self, Index)
+	return game:GetService(Index)
+end})
+
+
+local Players = Services.Players
+local UserInputService = Services.UserInputService
+local RunService = Services.RunService
+local ts = Services.TweenService
+local HtppService = Services.HttpService
+
+local localPlayer = Players.LocalPlayer
+local Mouse = localPlayer:GetMouse()
+local INew = Instance.new;
+local color3RGB =  Color3.fromRGB;
+
+local Library, Utility = {
+	Keybind = Enum.KeyCode.RightControl,
+	Connections = {},
+	sections = {},
+	short_keybind_names = {
+		["MouseButton1"] = "MB1",
+		["MouseButton2"] = "MB2",
+		["MouseButton3"] = "MB3",
+		["Insert"] = "INS",
+		["LeftAlt"] = "LALT",
+		["LeftControl"] = "LC",
+		["LeftShift"] = "LS",
+		["RightAlt"] = "RALT",
+		["RightControl"] = "RC",
+		["RightShift"] = "RS",
+		["CapsLock"] = "CAPS",
+		["Return"] = "RET",
+		["Backspace"] = "BSP",
+		["BackSlash"] = "BS"
+	},
+	Elementsopened = {},
+	InstanceStorage = {},
+	Flags = {},
+	Tabs = {},
+	Elements = {},
+	Folder = "eclipsewtf/",
+	Font = nil,
+	FontSize = 12,
+
+}, {
+
+	MakeDraggable = function(Dragger, Object, OnChange, OnEnd)
+		local Position, StartPosition = nil, nil
+
+		Dragger.InputBegan:Connect(function(Input)
+			if Input.UserInputType == Enum.UserInputType.MouseButton1 then
+				Position = UserInputService:GetMouseLocation()
+				StartPosition = Object.AbsolutePosition
+			end
+		end)
+		UserInputService.InputChanged:Connect(function(Input)
+			if StartPosition and Input.UserInputType ==
+				Enum.UserInputType.MouseMovement then
+				local Mouse = UserInputService:GetMouseLocation()
+				local Delta = Mouse - Position
+				Position = Mouse
+
+				Delta = Object.Position + UDim2.fromOffset(Delta.X, Delta.Y)
+				if OnChange then OnChange(Delta) end
+			end
+		end)
+		Dragger.InputEnded:Connect(function(Input)
+			if Input.UserInputType == Enum.UserInputType.MouseButton1 then
+				if OnEnd then
+					OnEnd(Object.Position, StartPosition)
+				end
+				Position, StartPosition = nil, nil
+			end
+		end)
+	end,
+	MakeResizeable = function(Dragger, Object, MinSize, MaxSize, OnChange, OnEnd)
+		local Position, StartSize = nil, nil
+
+		Dragger.InputBegan:Connect(function(Input)
+			if Input.UserInputType == Enum.UserInputType.MouseButton1 then
+				Position = UserInputService:GetMouseLocation()
+				StartSize = Object.AbsoluteSize
+			end
+		end)
+		UserInputService.InputChanged:Connect(function(Input)
+			if StartSize and Input.UserInputType ==
+				Enum.UserInputType.MouseMovement then
+				local Mouse = UserInputService:GetMouseLocation()
+				local Delta = Mouse - Position
+				local Size = StartSize + Delta
+
+				local SizeX = math.max(MinSize.X, Size.X)
+				-- SizeX = math.min(MaxSize.X, Size.X)
+
+				local SizeY = math.max(MinSize.Y, Size.Y)
+				-- SizeY = math.min(MaxSize.Y, Size.Y)
+
+				OnChange(UDim2.fromOffset(SizeX, SizeY))
+			end
+		end)
+		Dragger.InputEnded:Connect(function(Input)
+			if Input.UserInputType == Enum.UserInputType.MouseButton1 then
+				if OnEnd then OnEnd(Object.Size, StartSize) end
+				Position, StartSize = nil, nil
+			end
+		end)
+	end,
+
+	ripple = function(button, x, y)
+		if button ~= nil then
+			button.ClipsDescendants = true
+
+			local Circle = Instance.new("ImageLabel")
+			Circle.ScaleType = Enum.ScaleType.Stretch
+			Circle.Parent = button
+			Circle.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+			Circle.BackgroundTransparency = 1.000
+			Circle.ZIndex = 10
+			Circle.Image = "rbxassetid://266543268"
+			Circle.ImageColor3 = Color3.fromRGB(210, 210, 210)
+			Circle.ImageTransparency = 0.4
+			local uiCorner = Instance.new("UICorner")
+			uiCorner.CornerRadius = UDim.new(0, 4)
+			uiCorner.Parent = Circle
+
+			local new_x = x - Circle.AbsolutePosition.X
+			local new_y = y - Circle.AbsolutePosition.Y
+			Circle.Position = UDim2.new(0, new_x, 0, new_y)
+
+			local size = 0
+			if button.AbsoluteSize.X > button.AbsoluteSize.Y then
+				size = button.AbsoluteSize.X * 1.5
+			elseif button.AbsoluteSize.X < button.AbsoluteSize.Y then
+				size = button.AbsoluteSize.Y * 1.5
+			elseif button.AbsoluteSize.X == button.AbsoluteSize.Y then
+				size = button.AbsoluteSize.X * 1.5
+			end
+
+			Circle:TweenSizeAndPosition(UDim2.new(0, size, 0, size), UDim2.new(
+				0.5, -size / 2, 0.5, -size / 2),
+				"Out", "Quad", 0.5, false, nil)
+			ts:Create(Circle, TweenInfo.new(0.6, Enum.EasingStyle.Linear,
+				Enum.EasingDirection.InOut),
+				{ImageTransparency = 1}):Play()
+			wait(0.6)
+			Circle:Destroy()
+		end
+	end,
+	TableToColor = function(Table)
+		if type(Table) ~= "table" then return Table end
+		return Color3.fromHSV(Table[1], Table[2], Table[3])
+	end,
+	Proxify = function(Table)
+		local Proxy, Events = {}, {}
+		local ChangedEvent = Instance.new("BindableEvent")
+		Table.Changed = ChangedEvent.Event
+		Proxy.Internal = Table
+		function Table:GetPropertyChangedSignal(Property)
+			local PropertyEvent = Instance.new("BindableEvent")
+
+			Events[Property] = Events[Property] or {}
+			table.insert(Events[Property], PropertyEvent)
+
+			return PropertyEvent.Event
+		end
+
+		setmetatable(Proxy, {
+			__index = function(Self, Key) return Table[Key] end,
+			__newindex = function(Self, Key, Value)
+				local OldValue = Table[Key]
+				Table[Key] = Value
+
+				ChangedEvent:Fire(Key, Value, OldValue)
+				if Events[Key] then
+					for Index, Event in ipairs(Events[Key]) do
+						Event:Fire(Value, OldValue)
+					end
+				end
+			end
+		})
+
+		return Proxy
+	end,
+	FindElementByFlag = function(Elements, Flag)
+		for Index, Element in pairs(Elements) do
+			if Element.Flag == Flag then return Element end
+		end
+	end,
+	GetConfigs = function(FolderName)
+		if not isfolder(FolderName) then makefolder(FolderName) end
+		if not isfolder(FolderName .. "\\Configs") then
+			makefolder(FolderName .. "\\Configs")
+		end
+
+		local Configs = {}
+		for Index, Config in pairs(listfiles(FolderName .. "\\Configs") or {}) do
+			Config = Config:gsub(FolderName .. "\\Configs\\", "")
+			Config = Config:gsub(".json", "")
+
+			Configs[#Configs + 1] = Config
+		end
+
+		return Configs
+	end,
+	GetType = function(Self, Object, Default, Type, UseProxify)
+		if typeof(Object) == Type then
+			return UseProxify and Self.Proxify(Object) or Object
+		end
+		return UseProxify and Self.Proxify(Default) or Default
+	end,
+
+	Theme = {
+		Accent = color3RGB(71, 169, 221),
+		Outline = color3RGB(50,50,50),
+		Background = color3RGB(13, 13, 14),
+		Text_light = color3RGB(255, 255, 255),
+		Text_dark = color3RGB(144, 144, 144),
+		White = color3RGB(255, 255, 255),
+		ComponentBackground = color3RGB(32, 31, 32),
+		LightContrast = color3RGB(17, 17, 18),
+	}
+
+}
+
+if not isfolder(Library.Folder) then
+	makefolder(Library.Folder)
+end
+if not isfile(Library.Folder .. "ProggyClean.ttf") then
+	writefile(Library.Folder .. "ProggyClean.ttf", game:HttpGet("https://raw.githubusercontent.com/Qw3rty707/Qw-hub/main/uistuff/ProggyClean.ttf?raw=true"))
+end
+if not isfile(Library.Folder .. "ProggyClean.font") then
+	local Data = {
+		name = "ProggyClean",
+		faces = {
+			{
+				name = "Regular",
+				weight = 100,
+				style = "normal",
+				assetId = getcustomasset(Library.Folder .. "ProggyClean.ttf"),
+			},
+		},
+	}
+	writefile(Library.Folder .. "ProggyClean.font", HtppService:JSONEncode(Data))
+end
+Library.Font = Font.new(getcustomasset(Library.Folder .. "ProggyClean.font") )
+
+
+function Utility:Render(ObjectType, Properties, Children)
+	local Passed, Statement = pcall(function()
+		local Object = INew(ObjectType)
+
+		for Property, Value in pairs(Properties) do
+			if string.find(Property, "Color") and typeof(Value) == "string" and
+				ObjectType ~= "UIGradient" then
+				local Theme = self.Theme[Value]
+				Utility:UpdateObject(Object, Property, Value)
+				Object[Property] = Theme
+			else
+				Object[Property] = Value
+			end
+
+		end
+		if Children then
+			for Index, Child in pairs(Children) do
+				Child.Parent = Object
+			end
+		end
+
+		return Object
+	end)
+
+	if Passed then
+		return Statement
+	else
+		warn("Failed to render object: " .. tostring(ObjectType),
+			tostring(Statement))
+		return nil
+	end
+end
+
+function Utility:UpdateObject(Object, Property, Value)
+	if not Library.InstanceStorage[Object] then
+		Library.InstanceStorage[Object] = {[Property] = Value}
+	else
+		Library.InstanceStorage[Object][Property] = Value
+	end
+end
+function Utility:SetTheme(Theme, Color)
+	if Utility.Theme[Theme] ~= Color then
+		Utility.Theme[Theme] = Color
+		--
+		for Index, Value in pairs(Library.InstanceStorage) do
+			for Index2, Value2 in pairs(Value) do
+				if Value2 == Theme then Index[Index2] = Color end
+			end
+		end
+	end
+end
+
+function Utility:Fade(object, visible) 
+	task.spawn(function()
+		for i, v in pairs(object:GetDescendants()) do
+			if (v:IsA("Frame") or v:IsA("ScrollingFrame")) then
+				if v.BackgroundTransparency ~= 1 then
+					ts:Create(v,
+						TweenInfo.new(0.7, Enum.EasingStyle.Exponential),
+						{BackgroundTransparency = visible and 0 or 0.9})
+						:Play()
+					ts:Create(v.Parent,
+						TweenInfo.new(0.7, Enum.EasingStyle.Exponential),
+						{BackgroundTransparency = visible and 0 or 0.9})
+						:Play()
+				end
+				elseif v:IsA("UiStroke") then
+						ts:Create(v, TweenInfo.new(0.4, Enum.EasingStyle.Exponential),
+						{Transparency = visible and 0 or 1}):Play()
+				elseif v:IsA("TextLabel") or v:IsA("TextButton") or v:IsA("TextBox") then
+						ts:Create(v, TweenInfo.new(0.4, Enum.EasingStyle.Exponential),
+						{TextTransparency = visible and 0 or 1}):Play()
+
+			end
+		end
+
+		task.delay(0.5,function()
+			object.Visible = visible
+
+		end)
+	end)
+end
+
+function Utility:MouseIsOverOpenedFrame()
+	for Frame, _ in next, Library.Elementsopened do
+		local AbsPos, AbsSize = Frame.AbsolutePosition, Frame.AbsoluteSize;
+
+		if Mouse.X >= AbsPos.X and Mouse.X <= AbsPos.X + AbsSize.X and Mouse.Y >=
+			AbsPos.Y and Mouse.Y <= AbsPos.Y + AbsSize.Y then return true end
+	end
+end
+function Utility:Signal(Event, thread)
+	local Connection;
+	local Passed, Statement = pcall(function()
+		Connection = Event:Connect(thread);
+	end)
+	if Passed then
+		table.insert(Library.Connections, Connection);
+		return Connection;
+	else
+		warn(Event, Statement);
+		return nil;
+	end
+end
+local Tabs = Library.Tabs;
+local Sections = Library.sections;
+Library.__index = Library
+Tabs.__index = Library.Tabs
+Sections.__index = Library.sections
+
+function Library:Window(Properties)
+	local properties = Properties or {}
+	local window = Utility:GetType(properties, {}, "table", false)
+	window.Title = Utility:GetType(window.Title, "Window", "string")
+	window.Tabs = Utility:GetType(window.Tabs, {}, "table")
+
+	local SCREENGUI = Utility:Render("ScreenGui", {Parent = Services.CoreGui,Enabled = false})
+
+	 mainFrame = Utility:Render("Frame", {
+		BackgroundColor3 = "Background",
+		BorderSizePixel = 0,
+		Position = UDim2.fromScale(0.0195, -0.000646),
+		Size = UDim2.fromOffset(640, 500),
+		Parent = SCREENGUI
+	})
+		local sidebar = Utility:Render("Frame", {
+		AnchorPoint = Vector2.new(0, 0.5),
+		BackgroundColor3 = "LightContrast",
+		BorderColor3 = "Outline",
+		Position = UDim2.new(0,6, 0.5,10),
+		Size = UDim2.fromOffset(100, 465),
+		Parent = mainFrame
+		})
+		tabholder = Utility:Render("ScrollingFrame", {
+			AutomaticCanvasSize = Enum.AutomaticSize.Y,
+			CanvasSize = UDim2.new(),
+			ScrollBarThickness = 0,
+			ScrollingDirection = Enum.ScrollingDirection.Y,
+			Active = true,
+			BackgroundTransparency = 1,
+			BorderSizePixel = 0,
+			Position = UDim2.fromScale(0, 0.154),
+			Size = UDim2.fromScale(1, 0.846),
+			ZIndex = 2,
+			Parent = sidebar
+		})
+			local uIListLayout = Utility:Render("UIListLayout", {
+			Padding = UDim.new(0, 8),
+			HorizontalAlignment = Enum.HorizontalAlignment.Center,
+			SortOrder = Enum.SortOrder.LayoutOrder,
+			Parent = tabholder
+			})
+	
+			local uIPadding = Utility:Render("UIPadding", {
+			PaddingTop = UDim.new(0, 4),
+			Parent = tabholder
+			})
+		
+	
+		local logo = Utility:Render("ImageLabel", {
+			Image = "rbxassetid://17631754743",
+			ScaleType = Enum.ScaleType.Fit,
+			BackgroundTransparency = 1,
+			BorderSizePixel = 0,
+			Position = UDim2.fromScale(0.292, 0.0254),
+			Size = UDim2.fromOffset(40, 40),
+			Parent = sidebar
+		})
+		
+	
+		pageholder = Utility:Render("ScrollingFrame", {
+		AutomaticCanvasSize = Enum.AutomaticSize.Y,
+		CanvasSize = UDim2.new(),
+		ScrollBarThickness = 0,
+		ScrollingDirection = Enum.ScrollingDirection.Y,
+		Active = true,
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		Position = UDim2.fromOffset(107,16),
+		Size = UDim2.fromOffset(533, 484),
+		Parent = mainFrame
+		})
+	
+		local topbar = Utility:Render("TextButton", {
+		FontFace = Library.Font,
+		TextSize = Library.FontSize,
+		Text = window.Title,
+		TextColor3 = "Text_light",
+		AutoButtonColor = false,
+		Active = false,
+		BackgroundColor3 = "LightContrast",
+		BorderSizePixel = 0,
+		Selectable = false,
+		Size = UDim2.new(1, 0, 0, 16),
+		Parent = mainFrame
+		})
+			function window:SaveConfig(FolderName, Name)
+	local Config = {}
+	for Index, Element in pairs(Library.Elements) do
+		if Element.Flag then
+			Config[Element.Flag] = Library.Flags[Element.Flag]
+		end
+	end
+	writefile(FolderName .. "\\Configs\\" .. Name .. ".json",
+			  HtppService:JSONEncode(Config))
+end
+function window:LoadConfig(FolderName, Name)
+	if table.find(Utility.GetConfigs(FolderName), Name) then
+		local DecodedJSON = HtppService:JSONDecode(
+								readfile(FolderName .. "\\Configs\\" .. Name ..
+											 ".json"))
+		for Flag, Value in pairs(DecodedJSON) do
+			local Element =
+				Utility.FindElementByFlag(Library.Elements, Flag)
+
+			if Element ~= nil and Element.IsColorpicker and Value:sub(1, 3) ==
+				"rgb" then
+
+				local result = Value:sub(5, #Value - 1)
+				local components = {}
+				for match in (result .. ","):gmatch("(.-)" .. ",") do
+					table.insert(components, tonumber(match))
+				end
+				if #components == 3 then
+					Element.Default = Utility.TableToColor(components) -- Utility.TableToColor(components)
+				end
+			end
+		end
+
+	end
+end
+function window:DeleteConfig(FolderName, Name)
+	if table.find(Utility.GetConfigs(FolderName), Name) then
+		delfile(FolderName .. "\\Configs\\" .. Name .. ".json")
+	end
+end
+function window:Getlistofconfigs(FolderName)
+	if not isfolder(FolderName) then makefolder(FolderName) end
+	if not isfolder(FolderName .. "\\Configs") then
+		makefolder(FolderName .. "\\Configs")
+	end
+	local Configs = {}
+	for Index, Config in pairs(listfiles(FolderName .. "\\Configs") or {}) do
+		Config = Config:gsub(FolderName .. "\\Configs\\", "")
+		Config = Config:gsub(".json", "")
+
+		Configs[#Configs + 1] = Config
+	end
+
+	return Configs
+end
+		function window:Initialize()
+			SCREENGUI.Enabled = true
+		end
+		Utility.MakeDraggable(topbar, mainFrame,function(Pos)
+		mainFrame.Position = Pos;
+		end)
+		window.firsttab = true
+		return setmetatable(window, Library)
+end
+
+function Library:Tab(properties)
+	local properties = properties or {}
+	local Tab = Utility:GetType(properties, {}, "table", false)
+	Tab.Selected = Utility:GetType(Tab.Selected, false, "boolean")
+	Tab.Title = Utility:GetType(Tab.Title, "Tab", "string")
+	Tab.Icon = Utility:GetType(Tab.Icon, "rbxassetid://", "string")
+
+	Tab.SideElements = Utility:GetType(Tab.SideElements, {}, "table")
+
+	local TabFrame = Utility:Render("TextButton", {
+		Active = true,
+		Text = "",
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		Position = UDim2.new(0.1, 0, -3.61e-08, 0),
+		Selectable = true,
+		Size = UDim2.new(1, 0, 0, 60),
+		Parent = tabholder,
+		ZIndex = 2,
+	})
+		local tabImage = Utility:Render("ImageLabel", {
+		Image = Tab.Icon,
+		ImageColor3 = "Text_dark",
+		AnchorPoint = Vector2.new(0.5, 0),
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		Position = UDim2.new(0.5, 0, 0, 0),
+		Size = UDim2.new(0, 34, 0, 34),
+		Parent = TabFrame
+		})
+	
+		local tabTitle = Utility:Render("TextLabel", {
+		FontFace = Library.Font,
+		TextSize = Library.FontSize,
+		Text = Tab.Title,
+		TextColor3 = "Text_dark",
+		TextDirection = Enum.TextDirection.LeftToRight,
+		TextYAlignment = Enum.TextYAlignment.Bottom,
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		Size = UDim2.new(1, 0, 1, 0),
+		Parent = TabFrame
+
+		})
+	
+		local uIPadding = Utility:Render("UIPadding", {
+		PaddingBottom = UDim.new(0, 4),
+		PaddingTop = UDim.new(0, 6),
+		Parent = TabFrame
+
+		})
+		
+		-- page init
+		local Page = Utility:Render("Frame", {
+			BackgroundTransparency = 1,
+			BorderSizePixel = 0,
+			BackgroundColor3 = "Background",
+			Size = UDim2.new(1, 0, 1, 0),
+			Visible = false,
+			Parent = pageholder
+		})
+			local uIListLayout = Utility:Render("UIListLayout", {
+			Padding = UDim.new(0, 10),
+			FillDirection = Enum.FillDirection.Horizontal,
+			HorizontalAlignment = Enum.HorizontalAlignment.Center,
+			SortOrder = Enum.SortOrder.LayoutOrder,
+			Parent = Page
+
+			})
+		
+			local left = Utility:Render("Frame", {
+			BackgroundTransparency = 1,
+			BorderSizePixel = 0,
+			BackgroundColor3 = "Background",
+			Size = UDim2.new(0.479, 0, 1, 0),
+			Parent = Page
+			}, {
+			uIListLayout1 = Utility:Render("UIListLayout", {
+				Padding = UDim.new(0, 10),
+				HorizontalAlignment = Enum.HorizontalAlignment.Center,
+				SortOrder = Enum.SortOrder.LayoutOrder,
+			}),
+		
+			uIPadding = Utility:Render("UIPadding", {
+				PaddingTop = UDim.new(0, 10),
+			}),
+			})
+		
+			local right = Utility:Render("Frame", {
+			BackgroundTransparency = 1,
+			BorderSizePixel = 0,
+			BackgroundColor3 = "Background",
+			Size = UDim2.new(0.479, 0, 1, 0),
+			Parent = Page
+
+			}, {
+			uIListLayout2 = Utility:Render("UIListLayout", {
+				Padding = UDim.new(0, 10),
+				HorizontalAlignment = Enum.HorizontalAlignment.Center,
+				SortOrder = Enum.SortOrder.LayoutOrder,
+			}),
+		
+			uIPadding1 = Utility:Render("UIPadding", {
+				PaddingTop = UDim.new(0, 10),
+			}),
+			})
+			
+		
+			function Tab:Open(value)
+				task.spawn(function()
+				for i,v in pairs(mainFrame:GetChildren()) do 
+				if v:IsA("TextButton") and v.Name == "noclickdetector" then 
+						v.Visible = false
+					end
+				end
+					Tab.Selected = value
+					Utility:Fade(Page, value)
+					ts:Create(tabImage,
+							TweenInfo.new(0.4, Enum.EasingStyle.Exponential), {
+								ImageColor3 = value and Utility.Theme.Text_light or
+								Utility.Theme.Text_dark
+					}):Play()
+					ts:Create(tabTitle, TweenInfo.new(0.4, Enum.EasingStyle.Exponential), {
+								TextColor3 = value and Utility.Theme.Text_light or
+								Utility.Theme.Text_dark
+					}):Play()
+					Utility:UpdateObject(tabImage, "ImageColor3",
+										value and "Text_light" or "Text_dark")
+					Utility:UpdateObject(tabTitle, "TextColor3",
+										value and "Text_light" or "Text_dark")
+					-- task.wait(0.5)
+		
+					-- SectionContainer.Visible = value
+		
+				end)
+			end
+			if self.firsttab then
+				self.firsttab = false
+				Tab:Open(true)
+		
+			end
+		
+			Utility:Signal(TabFrame.MouseButton1Down, function()
+				if not Tab.Selected then
+					Tab:Open(true)
+					for _, Tabs in pairs(self.Tabs) do
+						if Tabs.Selected and Tabs ~= Tab then
+							Tabs:Open(false)
+		
+						end
+					end
+				end
+			end)
+			Tab.SideElements = {Left = left, Right = right} -- doing this so it wont get mixed
+			self.Tabs[#self.Tabs + 1] = Tab
+			return setmetatable(Tab, Library.Tabs)
+end
+function Tabs:Section(properties)
+	local properties = properties or {}
+	local Section = {
+		Title = properties.Title or "section",
+		Side = properties.Side,
+		sectionframe = nil
+	}
+	local side = Section.Side == "Left" and self.SideElements.Left or self.SideElements.Right
+
+	local SectionFrame = Utility:Render("Frame", {
+		AutomaticSize = Enum.AutomaticSize.Y,
+		BackgroundColor3 = "LightContrast",
+		BorderColor3 = "Outline",
+		BorderMode = Enum.BorderMode.Inset,
+		Size = UDim2.new(1, 0, 0, 0),
+		Parent = side
+	}); Section.sectionframe = SectionFrame
+		local sectiontitle = Utility:Render("TextLabel", {
+		FontFace = Library.Font,
+		TextSize = Library.FontSize,
+		TextColor3 = "Text_light",
+		Text = Section.Title,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		Size = UDim2.new(1, 0, 0, 8),
+		Parent = SectionFrame
+		}, {
+		uIPadding = Utility:Render("UIPadding", {
+			PaddingBottom = UDim.new(0, 10),
+			PaddingLeft = UDim.new(0, 4),
+		}),
+		})
+	
+		local uIListLayout = Utility:Render("UIListLayout", {
+		Padding = UDim.new(0, 10),
+		HorizontalAlignment = Enum.HorizontalAlignment.Center,
+		SortOrder = Enum.SortOrder.LayoutOrder,
+		Parent = SectionFrame
+		})
+	
+		local uIPadding1 = Utility:Render("UIPadding", {
+		PaddingBottom = UDim.new(0, 10),
+		Parent = SectionFrame
+		})
+	
+					
+	return setmetatable(Section, Library.sections)
+end
+function Sections:Toggle(Properties)
+	
+	local properties = Properties or {}
+	local Toggle = Utility:GetType(properties, {}, "table", true)
+	Toggle.Title = Utility:GetType(Toggle.Title, "Toggle", "string")
+	Toggle.Flag = Utility:GetType(Toggle.Flag, Toggle.Title, "string")
+	Toggle.Default = Utility:GetType(Toggle.Default, false, "boolean")
+	Toggle.Callback = Utility:GetType(Toggle.Callback, function() end,
+									"function")
+	local toggleFrame =  Utility:Render("Frame", {
+		BackgroundTransparency = 1,
+		BackgroundColor3 = "LightContrast",
+		BorderSizePixel = 0,
+		Size = UDim2.new(1, 0, 0, 10),
+		Parent = self.sectionframe
+	})
+		local togglebox = Utility:Render("Frame", {
+		BackgroundColor3 = "ComponentBackground",
+		BorderColor3 = "Outline",
+		Size = UDim2.new(0, 10, 0, 10),
+		Parent = toggleFrame
+		})
+		local toggletitle = Utility:Render("TextLabel", {
+			FontFace = Library.Font,
+			TextColor3 = "Text_dark",
+			Text = Toggle.Title,
+			TextSize = Library.FontSize,
+			TextXAlignment = Enum.TextXAlignment.Left,
+			BackgroundTransparency = 1,
+			BorderSizePixel = 0,
+			Position = UDim2.new(1, 6, 0, 0),
+			Size = UDim2.new(1, 0, 1, 0),
+			Parent = togglebox
+		})
+		
+	
+		local uIPadding = Utility:Render("UIPadding", {
+		PaddingLeft = UDim.new(0, 8),
+		PaddingRight = UDim.new(0, 8),
+		Parent = toggleFrame
+		})
+		local toggledetector = Utility:Render("TextButton", {
+		FontFace = Font.new("rbxasset://fonts/families/SourceSansPro.json"),
+		TextSize = 14,
+		Text = "",
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		Size = UDim2.new(1, 0, 1, 0),
+		Parent = toggleFrame
+	})
+					Utility:Signal(toggledetector.MouseEnter, function()
+					if not Toggle.Default then
+						togglebox.BorderColor3 = Utility.Theme.Accent
+						toggletitle.TextColor3 = Utility.Theme.Text_light
+
+					end
+
+				end)
+				Utility:Signal(toggledetector.MouseLeave, function()
+					if not Toggle.Default then
+						togglebox.BorderColor3 = Utility.Theme.Outline
+						toggletitle.TextColor3 = Utility.Theme.Text_dark
+
+					end
+
+				end)
+		Toggle:GetPropertyChangedSignal("Default"):Connect(function(value)
+		Library.Flags[Toggle.Flag] = value
+		ts:Create(togglebox, TweenInfo.new(0.8, Enum.EasingStyle.Exponential), {
+			BackgroundColor3 = value and Utility.Theme.Accent or
+				Utility.Theme.ComponentBackground
+		}):Play()
+		ts:Create(toggletitle, TweenInfo.new(0.8, Enum.EasingStyle.Exponential), {
+		TextColor3 = value and Utility.Theme.Text_light or
+		Utility.Theme.Text_dark
+		}):Play()
+		Utility:UpdateObject(toggletitle, "TextColor3",value and "Text_light" or "Text_dark")
+
+		Utility:UpdateObject(togglebox, "BackgroundColor3",
+							value and "Accent" or "ComponentBackground")
+
+		pcall(Toggle.Callback,value)
+	end)
+	Utility:Signal(toggledetector.MouseButton1Down,function() 
+	Toggle.Default = not Toggle.Default 
+	end)
+	
+	Toggle.Default = Toggle.Default
+	Library.Elements[#Library.Elements + 1] = Toggle
+	return Toggle
+end
+function Sections:Colorpicker(Properties)
+	local properties = Properties or {}
+	local Colorpicker = Utility:GetType(properties, {}, "table", true)
+	Colorpicker.Title = Utility:GetType(Colorpicker.Title, "color picker",
+										"string")
+	Colorpicker.Default = Utility:GetType(Colorpicker.Default,
+										Color3.fromRGB(244, 244, 244),
+										"Color3")
+	Colorpicker.Callback = Utility:GetType(Colorpicker.Callback, function() end,
+										"function")
+	Colorpicker.IsColorpicker = true
+	Colorpicker.Flag = Utility:GetType(Colorpicker.Flag, Colorpicker.Title,
+									"string")
+
+	local colorpickeropened = false
+	local ColorpickerFrame = Utility:Render("Frame", {
+		BackgroundColor3 = "LightContrast",
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		Size = UDim2.new(1, 0, 0, 10),
+		Parent = self.sectionframe
+	})
+		local colorpickerBar = Utility:Render("Frame", {
+		AnchorPoint = Vector2.new(1, 0),
+		Position = UDim2.new(1, 0, 0, 0),
+		BorderColor3 = "Outline",
+		BorderSizePixel = 1,
+		Size = UDim2.new(0, 20, 0, 10),
+		Parent = ColorpickerFrame
+		})
+	
+		local uIPadding = Utility:Render("UIPadding", {
+		PaddingLeft = UDim.new(0, 8),
+		PaddingRight = UDim.new(0, 8),
+		Parent = ColorpickerFrame
+		})
+	
+		local colortitle = Utility:Render("TextLabel", {
+		FontFace = Library.Font,
+		TextColor3 = "Text_dark",
+		Text = Colorpicker.Title,
+		TextSize = Library.FontSize,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		Size = UDim2.new(1, 0, 1, 0),
+		Parent = ColorpickerFrame
+		})
+	local colorpickerDetector = Utility:Render("TextButton", {
+		FontFace = Font.new("rbxasset://fonts/families/SourceSansPro.json"),
+		TextSize = 14,
+		Text = "",
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		Size = UDim2.new(1, 0, 1, 0),
+		Parent = ColorpickerFrame,
+		ZIndex = 2
+	})
+		--> colorpicker opened frame <--
+	local noclickdetector = Utility:Render("TextButton", {
+		FontFace = Font.new("rbxasset://fonts/families/SourceSansPro.json"),
+		Text = "",
+		Name = "noclickdetector",
+		TextSize = 14,
+		Visible = false,
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		Position = UDim2.new(0, colorpickerBar.AbsolutePosition.X + 4, 0, colorpickerBar.AbsolutePosition.Y),
+		Size = UDim2.new(0, 167, 0, 142),
+		ZIndex = 2,
+		Parent = mainFrame
+	})
+	local Colorpickeropenedframe = Utility:Render("Frame", {
+		BackgroundColor3 = "ComponentBackground",
+		BorderSizePixel = 1,
+		BorderColor3 = "Outline",
+		Size = UDim2.new(1, 0, 1, 0),
+		ZIndex = 3,
+		Parent = noclickdetector
+	})
+	local sVSelection = Utility:Render("ImageButton", {
+		Image = "rbxassetid://11970108040",
+		BorderSizePixel = 0,
+		Position = UDim2.new(0, 0, 0.076, 0),
+		Size = UDim2.new(0, 132, 0, 119),
+		ZIndex = 3,
+		Parent = Colorpickeropenedframe
+	})
+	local sVSlider = Utility:Render("Frame", {
+		BackgroundColor3 = "White",
+		BackgroundTransparency = 1,
+		ClipsDescendants = true,
+		Position = UDim2.new(0.961, 0, 0.0187, 0),
+		Size = UDim2.new(0, 8, 0, 8),
+		ZIndex = 3,
+		Parent = sVSelection
+	})
+	local uIStroke = Utility:Render("UIStroke",
+									{Color = "White", Parent = sVSlider})
+
+	local uICorner = Utility:Render("UICorner", {
+		CornerRadius = UDim.new(1, 0),
+		Parent = sVSlider
+	})
+
+	local hUESelection = Utility:Render("ImageButton", {
+		Image = "rbxassetid://11970136481",
+		AnchorPoint = Vector2.new(1, 0),
+		BorderSizePixel = 0,
+		Position = UDim2.new(1, 0, 0.076, 0),
+		Size = UDim2.new(0, 16, 0, 119),
+		ZIndex = 3,
+		Parent = Colorpickeropenedframe
+	})
+	local hueSliider = Utility:Render("Frame", {
+		AnchorPoint = Vector2.new(0.5, 0),
+		ClipsDescendants = true,
+		BackgroundTransparency = 1,
+		Position = UDim2.new(0.5, 0, -0.014, 0),
+		Size = UDim2.new(1.36, 0, 0.0287, 0),
+		ZIndex = 3,
+		Parent = hUESelection
+	},{
+		uIStroke = Utility:Render("UIStroke",{Color = "White"})
+
+	})
+
+	local uIPadding2 = Utility:Render("UIPadding", {
+		PaddingBottom = UDim.new(0, 8),
+		PaddingLeft = UDim.new(0, 4),
+		PaddingRight = UDim.new(0, 8),
+		Parent = Colorpickeropenedframe
+	})
+	local Hoveringoncolorpicker
+
+	function Colorpicker:Show()
+		for Frame, Val in next, Library.Elementsopened do
+			Frame.Visible = false;
+			Library.Elementsopened[Frame] = nil;
+
+		end
+
+		noclickdetector.Visible = true;
+		Library.Elementsopened[noclickdetector] = true;
+	end
+
+	function Colorpicker:Hide()
+		noclickdetector.Visible = false;
+		Library.Elementsopened[noclickdetector] = nil;
+
+	end
+	Utility:Signal(colorpickerDetector.MouseButton1Click, function()
+		if not Utility:MouseIsOverOpenedFrame() then
+			if not noclickdetector.Visible then
+				Colorpicker:Show()
+			else
+				Colorpicker:Hide()
+			end
+		end
+	end)
+
+	ColorH = 1 -
+				(math.clamp(
+					hueSliider.AbsolutePosition.Y -
+						hUESelection.AbsolutePosition.Y, 0,
+					hUESelection.AbsoluteSize.Y) / hUESelection.AbsoluteSize.Y)
+	ColorS = (math.clamp(sVSlider.AbsolutePosition.X -
+							sVSelection.AbsolutePosition.X, 0,
+						sVSelection.AbsoluteSize.X) /
+				sVSelection.AbsoluteSize.X)
+	ColorV = 1 -
+				(math.clamp(
+					sVSlider.AbsolutePosition.Y -
+						sVSelection.AbsolutePosition.Y, 0,
+					sVSelection.AbsoluteSize.Y) / sVSelection.AbsoluteSize.Y)
+
+	function Colorpicker:UpdateColorPicker()
+		colorpickerBar.BackgroundColor3 = Color3.fromHSV(ColorH, ColorS, ColorV)
+		hueSliider.Position = UDim2.new(0.5, 0, ColorH, 0)
+		sVSelection.BackgroundColor3 = Color3.fromHSV(ColorH, 1, 1)
+		sVSlider.Position = UDim2.new(ColorS, 0, 1 - ColorV, 0)
+
+		local result = ("rgb(%s,%s,%s)"):format(ColorH, ColorS, ColorV)
+		Library.Flags[Colorpicker.Flag] = result
+
+		Colorpicker.Callback(colorpickerBar.BackgroundColor3)
+	end
+	function Colorpicker:OnChanged(thread)
+		Colorpicker.Changed = thread
+		thread(colorpickerBar.BackgroundColor3)
+	end
+	function Colorpicker:SetHue()
+
+		local HueY = (math.clamp(Mouse.Y - hUESelection.AbsolutePosition.Y, 0,
+								hUESelection.AbsoluteSize.Y) /
+						hUESelection.AbsoluteSize.Y)
+
+		ColorH = HueY
+		Colorpicker:UpdateColorPicker()
+
+	end
+	function Colorpicker:SetSaturation()
+		local ColorX = (math.clamp(Mouse.X - sVSelection.AbsolutePosition.X, 0,
+								sVSelection.AbsoluteSize.X) /
+						sVSelection.AbsoluteSize.X)
+		local ColorY = (math.clamp(Mouse.Y - sVSelection.AbsolutePosition.Y, 0,
+								sVSelection.AbsoluteSize.Y) /
+						sVSelection.AbsoluteSize.Y)
+		ColorS = ColorX
+		ColorV = 1 - ColorY
+		Colorpicker:UpdateColorPicker()
+
+	end
+	function Colorpicker:SetValue(H, S, V)
+
+		ColorH = H
+		ColorS = S
+		ColorV = V
+
+		Colorpicker:UpdateColorPicker()
+
+	end
+
+	Colorpicker:GetPropertyChangedSignal("Default"):Connect(function(val)
+			if typeof(val) == "Color3" then
+
+				task.spawn(function()
+					local colorh, colors, colorv = val:ToHSV()
+					colorpickerBar.BackgroundColor3 =
+						Color3.fromHSV(colorh, colors, colorv)
+					hueSliider.Position = UDim2.new(0.5, 0, colorh, 0)
+					sVSlider.Position = UDim2.new(colors, 0, 1 - colorv, 0)
+					sVSelection.BackgroundColor3 = Color3.fromHSV(colorh, 1, 1)
+					local result =
+						("rgb(%s,%s,%s)"):format(colorh, colors, colorv)
+					Library.Flags[Colorpicker.Flag] = result
+					Colorpicker.Callback(colorpickerBar.BackgroundColor3)
+				end)
+			end
+
+		end)
+
+	Utility:Signal(sVSelection.MouseButton1Down, function()
+		while UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) do
+			task.wait()
+			Colorpicker:SetSaturation()
+		end
+	end)
+
+	Utility:Signal(hUESelection.MouseButton1Down, function()
+		while UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) do
+			task.wait()
+			Colorpicker:SetHue()
+		end
+	end)
+		Utility:Signal(colorpickerDetector.MouseEnter,function()
+
+			colortitle.TextColor3 = Utility.Theme.Text_light
+			colorpickerBar.BorderColor3 = Utility.Theme.Accent
+			
+		end)
+		Utility:Signal(colorpickerDetector.MouseLeave,function()
+			colortitle.TextColor3 = Utility.Theme.Text_dark
+			
+			colorpickerBar.BorderColor3 = Utility.Theme.Outline
+			
+		end)
+		Colorpicker.Default = Colorpicker.Default
+	Library.Elements[#Library.Elements + 1] = Colorpicker
+	return Colorpicker
+end
+function Sections:Button(Properties)
+		local properties = Properties or {}
+		local Button = Utility:GetType(properties, {}, "table", false)
+		Button.Title = Utility:GetType(Button.Title, "Button", "string")
+		Button.Callback = Utility:GetType(Button.Callback, function() end,
+										"function")
+	
+		local ButtonFrame = Utility:Render("Frame", {
+			BackgroundTransparency = 1,
+			BorderSizePixel = 0,
+			BackgroundColor3 = "LightContrast",
+			Size = UDim2.new(1, 0, 0, 18),
+			Parent = self.sectionframe
+		})
+		local uIPadding = Utility:Render("UIPadding", {
+			PaddingLeft = UDim.new(0, 8),
+			PaddingRight = UDim.new(0, 8),
+			Parent = ButtonFrame
+		})
+	
+		local buttonbox = Utility:Render("Frame", {
+			BackgroundColor3 = "ComponentBackground",
+			BorderSizePixel = 1,
+			BorderColor3 = "Outline",
+			Size = UDim2.new(1, 0, 1, 0),
+			Parent = ButtonFrame
+		})
+		local buttonTitle = Utility:Render("TextLabel", {
+			FontFace = Library.Font,
+			TextColor3 = "Text_light",
+			TextSize = Library.FontSize,
+			Text = Button.Title,
+			BackgroundTransparency = 1,
+			BorderSizePixel = 0,
+			Size = UDim2.new(1, 0, 1, 0),
+			Parent = buttonbox
+		})
+	
+		local uIPadding1 = Utility:Render("UIPadding", {
+			PaddingLeft = UDim.new(0, 4),
+			PaddingRight = UDim.new(0, 4),
+			Parent = buttonbox
+		})
+	
+		local buttondetector = Utility:Render("TextButton", {
+			FontFace = Font.new("rbxasset://fonts/families/SourceSansPro.json"),
+			TextSize = 14,
+			Text = "",
+			BackgroundTransparency = 1,
+			BorderSizePixel = 0,
+			Size = UDim2.new(1, 0, 1, 0),
+			Parent = buttonbox
+		})
+		Utility:Signal(buttondetector.MouseButton1Down, function()
+			--	task.spawn(function()
+			Utility.ripple(buttonbox, Mouse.x, Mouse.Y)
+			Button.Callback()
+			-- end)
+		end)
+		Utility:Signal(buttondetector.MouseEnter, function()
+			--	task.spawn(function()
+			buttonbox.BorderColor3 = Utility.Theme.Accent
+			-- end)
+		end)
+		Utility:Signal(buttondetector.MouseLeave, function()
+			--	task.spawn(function()
+			buttonbox.BorderColor3 = Utility.Theme.Outline
+			-- end)
+		end)
+		function Button:OnChanged(thread)
+			Button.Changed = thread
+			thread()
+		end
+	
+		Library.Elements[#Library.Elements + 1] = Button
+		return Button
+	
+end
+function Sections:Keybind(Properties)
+	local properties = Properties or {}
+	local Keybind = Utility:GetType(properties, {}, "table", true)
+	Keybind.Title = Utility:GetType(Keybind.Title, "Key picker", "string")
+	Keybind.Mode = Utility:GetType(Keybind.Mode, "Toggle", "string")
+	Keybind.Flag = Utility:GetType(Keybind.Flag, Keybind.Title, "string")
+	Keybind.Default = Utility:GetType(Keybind.Default, "Q", "string")
+	Keybind.Value = Utility:GetType(Keybind.Value, false, "boolean")
+	Keybind.Callback = Utility:GetType(Keybind.Callback, function() end,
+									"function")
+	local Keybinding, Holding, keybindValue = false, false, Keybind.Value
+	local holdmode = Keybind.Mode == "Hold" and true or false
+	local togglemode = Keybind.Mode == "Toggle" and true or false
+	local Buttonmode = Keybind.Mode == "Button" and true or false
+	
+	local WhitelistedMouse = {
+		Enum.UserInputType.MouseButton1, Enum.UserInputType.MouseButton2,
+		Enum.UserInputType.MouseButton3
+	}
+	local BlacklistedKeys = {
+		Enum.KeyCode.Unknown, Enum.KeyCode.W, Enum.KeyCode.A, Enum.KeyCode.S,
+		Enum.KeyCode.D, Enum.KeyCode.Up, Enum.KeyCode.Left, Enum.KeyCode.Down,
+		Enum.KeyCode.Right, Enum.KeyCode.Slash, Enum.KeyCode.Tab,
+		Enum.KeyCode.Backspace, Enum.KeyCode.Escape
+	}
+
+	local KeybindFrame = Utility:Render("Frame", {
+		BackgroundColor3 = "LightContrast",
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		Size = UDim2.new(1, 0, 0, 14),
+		Parent = self.sectionframe
+	})
+		local keypickingframe = Utility:Render("Frame", {
+		AnchorPoint = Vector2.new(1, 0),
+		AutomaticSize = Enum.AutomaticSize.X,
+		BackgroundColor3 = "ComponentBackground",
+		BorderColor3 = "Outline",
+		Position = UDim2.new(1, 0, 0, 0),
+		Size = UDim2.new(0, 0, 0, 14),
+		Parent = KeybindFrame
+		})
+		local keybindingText = Utility:Render("TextLabel", {
+			FontFace = Library.Font,
+			Text = "None",
+			TextColor3 = "Text_dark",
+			TextSize = Library.FontSize,
+			AutomaticSize = Enum.AutomaticSize.X,
+			BackgroundTransparency = 1,
+			BorderSizePixel = 0,
+			Size = UDim2.new(1, 0, 1, 0),
+			Parent = keypickingframe
+		})
+	
+		local uIPadding = Utility:Render("UIPadding", {
+			PaddingLeft = UDim.new(0, 4),
+			PaddingRight = UDim.new(0, 4),
+			Parent = keypickingframe
+		})
+		
+	
+		local uIPadding1 = Utility:Render("UIPadding", {
+		PaddingLeft = UDim.new(0, 8),
+		PaddingRight = UDim.new(0, 8),
+		Parent = KeybindFrame
+		})
+	
+		local keybindtitle = Utility:Render("TextLabel", {
+		FontFace = Library.Font,
+		TextSize = Library.FontSize,
+		Text = Keybind.Title,
+		TextColor3 = "Text_dark",
+		TextXAlignment = Enum.TextXAlignment.Left,
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		Size = UDim2.new(1, 0, 1, 0),
+		Parent = KeybindFrame
+		})
+		local keybindDetector = Utility:Render("TextButton", {
+			FontFace = Font.new("rbxasset://fonts/families/SourceSansPro.json"),
+			TextSize = 14,
+			Text = "",
+			BackgroundTransparency = 1,
+			BorderSizePixel = 0,
+			Size = UDim2.new(1, 0, 1, 0),
+			Parent = KeybindFrame
+		})
+		function Keybind:CheckKey(tab, key)
+			for i, v in next, tab do if v == key then return true end end
+		end
+		function Keybind:Setkey(Key)
+			Keybind.Default = Key
+			-- Keybinding = false
+			-- Library.Flags[Keybind.Flag] = Key.Name
+			-- local keybind_default_text = tostring(Key.Name) or tostring(Keybind.Default.Name)
+			-- keybindingText.Text = short_keybind_names[keybind_default_text] or keybind_default_text:upper() 
+		end
+		Utility:Signal(keybindDetector.MouseButton1Click, function()
+			if Keybinding ~= true then
+				Keybinding = true
+				keybindingText.Text = "..."
+	
+			end
+		end)
+	
+		Utility:Signal(UserInputService.InputBegan, function(Input)
+	
+			if (Input.KeyCode.Name == Keybind.Default or Input.UserInputType.Name ==
+				Keybind.Default) and not Keybinding then
+				if holdmode then
+					Holding = true
+					Keybind.Callback(Holding)
+				elseif not Keybinding and togglemode then
+					keybindValue = not keybindValue
+					Keybind.Callback(keybindValue)
+				end
+			elseif Keybinding then
+				local key
+				pcall(function()
+					if not Keybind:CheckKey(BlacklistedKeys, Input.KeyCode) then
+						key = Input.KeyCode
+					end
+				end)
+				pcall(function()
+					if Keybind:CheckKey(WhitelistedMouse, Input.UserInputType) and
+						not key then key = Input.UserInputType end
+				end)
+				key = key.Name or Keybind.Default
+				Keybind:Setkey(key)
+			end
+		end)
+		Keybind:GetPropertyChangedSignal("Default"):Connect(function(Key)
+	
+			Keybinding = false
+			Library.Flags[Keybind.Flag] = Key
+			local keybind_default_text = tostring(Key) or tostring(Keybind.Default)
+	
+			keybindingText.Text = Library.short_keybind_names[keybind_default_text] or keybind_default_text:upper() -- short_keybind_names[keybind_default_text] or keybind_default_text:upper() 
+				
+			
+		end)
+		Utility:Signal(UserInputService.InputEnded, function(Input)
+			if Input.KeyCode.Name == Keybind.Default or Input.UserInputType.Name ==
+				Keybind.Default then
+				if holdmode and Holding then
+					Holding = false
+					Keybind.Callback(Holding)
+				end
+			end
+		end)
+		Utility:Signal(UserInputService.InputEnded, function(Input)
+			if Input.KeyCode.Name == Keybind.Default or Input.UserInputType.Name ==
+				Keybind.Default then
+				if Buttonmode then Keybind.Callback() end
+			end
+		end)
+		Utility:Signal(keybindDetector.MouseEnter,function()
+
+			keybindtitle.TextColor3 = Utility.Theme.Text_light
+			keypickingframe.BorderColor3 = Utility.Theme.Accent
+			
+		end)
+		Utility:Signal(keybindDetector.MouseLeave,function()
+			keybindtitle.TextColor3 = Utility.Theme.Text_dark
+			
+			keypickingframe.BorderColor3 = Utility.Theme.Outline
+			
+		end)
+		Keybind:Setkey(Keybind.Default)
+	
+		Library.Elements[#Library.Elements + 1] = Keybind
+	
+		return Keybind
+end
+function Sections:Dropdown(Properties)
+	local properties = Properties or {}
+	local Dropdown = Utility:GetType(properties, {}, "table", true)
+	Dropdown.Title = Utility:GetType(Dropdown.Title, "Dropdown", "string")
+	Dropdown.Opened = Utility:GetType(Dropdown.Opened, false, "boolean")
+	Dropdown.Flag = Utility:GetType(Dropdown.Flag, Dropdown.Title, "string")
+	Dropdown.Options = Utility:GetType(Dropdown.Options, {}, "table")
+	Dropdown.Default = Utility:GetType(Dropdown.Default, Dropdown.Options[1],
+									"string")
+	Dropdown.Callback = Utility:GetType(Dropdown.Callback, function() end,
+										"function")
+
+	local DropdownFrame = Utility:Render("Frame", {
+		BackgroundColor3 = "LightContrast",
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		Size = UDim2.new(1, 0, 0, 30),
+		Parent = self.sectionframe
+	})
+		local dropdownbox = Utility:Render("Frame", {
+		AnchorPoint = Vector2.new(0, 1),
+		BackgroundColor3 = "ComponentBackground",
+		BorderColor3 = "Outline",
+		Position = UDim2.new(0, 0, 1, 0),
+		Size = UDim2.new(1, 0, 0, 14),
+		Parent = DropdownFrame
+		})
+		local optionselectedtext = Utility:Render("TextLabel", {
+			FontFace = Library.Font,
+			TextColor3 = "Text_dark",
+			TextSize = Library.FontSize,
+			TextXAlignment = Enum.TextXAlignment.Left,
+			BackgroundTransparency = 1,
+			BorderSizePixel = 0,
+			Size = UDim2.new(0, 200, 1, 0),
+			Parent = dropdownbox
+		})
+	
+		local uIPadding = Utility:Render("UIPadding", {
+			PaddingLeft = UDim.new(0, 4),
+			PaddingRight = UDim.new(0, 4),
+			Parent = dropdownbox
+		})
+	
+		local arrow = Utility:Render("TextLabel", {
+			FontFace = Library.Font,
+			Text = "+",
+			TextColor3 = "Text_dark",
+			TextSize = Library.FontSize,
+			TextXAlignment = Enum.TextXAlignment.Right,
+			AnchorPoint = Vector2.new(1, 0),
+			BackgroundTransparency = 1,
+			BorderSizePixel = 0,
+			Position = UDim2.new(1, 0, 0, 0),
+			Size = UDim2.new(0, 40, 1, 0),
+			Parent = dropdownbox
+		})
+		
+	
+		local uIPadding1 = Utility:Render("UIPadding", {
+		PaddingLeft = UDim.new(0, 8),
+		PaddingRight = UDim.new(0, 8),
+		Parent = DropdownFrame
+		})
+	
+		local dropdownTitle = Utility:Render("TextLabel", {
+		FontFace = Library.Font,
+		TextColor3 = "Text_dark",
+		Text = Dropdown.Title,
+		TextSize = Library.FontSize,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		TextYAlignment = Enum.TextYAlignment.Top,
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		Size = UDim2.new(1, 0, 1, 0),
+		Parent = DropdownFrame
+		})
+		local noclickdetector = Utility:Render("TextButton", {
+		FontFace = Font.new("rbxasset://fonts/families/SourceSansPro.json"),
+		Text = "",
+		TextSize = 14,
+		AutoButtonColor = false,
+		BorderSizePixel = 0,
+		BackgroundTransparency = 1,
+		AnchorPoint = Vector2.new(1,0),
+		Position = UDim2.new(1, 4, 1, 0),
+		Size = UDim2.new(1, 8, 0, 100),
+		Visible = false,
+		ZIndex = 2,
+		Parent = dropdownbox
+	})
+	local optionContainer = Utility:Render("ScrollingFrame", {
+		AutomaticCanvasSize = Enum.AutomaticSize.Y,
+		CanvasSize = UDim2.new(),
+		ScrollBarImageColor3 = "Accent",
+		ScrollBarThickness = 4,
+		BorderSizePixel = 0,
+		ScrollingDirection = Enum.ScrollingDirection.Y,
+		Active = true,
+		BackgroundColor3 = "ComponentBackground",
+		BackgroundTransparency = 0,
+		Size = UDim2.new(1, 0, 1, 0),
+		ZIndex = 3,
+		Parent = noclickdetector
+	},{
+			 Utility:Render("UIStroke",
+									{Color = "Outline",ApplyStrokeMode = Enum.ApplyStrokeMode.Border})
+	})
+	local uIListLayout = Utility:Render("UIListLayout", {
+		HorizontalAlignment = Enum.HorizontalAlignment.Center,
+		SortOrder = Enum.SortOrder.LayoutOrder,
+		Parent = optionContainer
+	})
+
+	local DropdownDetector = Utility:Render("TextButton", {
+		FontFace = Font.new("rbxasset://fonts/families/SourceSansPro.json"),
+		TextSize = 14,
+		Text = "",
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		Size = UDim2.new(1, 0, 1, 0),
+		Parent = DropdownFrame
+	})
+				Utility:Signal(DropdownDetector.MouseEnter, function()
+					if not Dropdown.Opened then
+						dropdownTitle.TextColor3 = Utility.Theme.Text_light
+						dropdownbox.BorderColor3 = Utility.Theme.Accent
+
+					end
+				end)
+
+				Utility:Signal(DropdownDetector.MouseLeave, function()
+					if not Dropdown.Opened then
+						dropdownTitle.TextColor3 = Utility.Theme.Text_dark
+					end
+						dropdownbox.BorderColor3 = Utility.Theme.Outline
+
+				end)
+
+function Dropdown:AddOption(Options)
+		if type(Options) ~= "table" then return end
+		for i, v in pairs(Options) do
+			--	table.insert(Dropdown.Options,v)
+
+			local OptionButton = Utility:Render("TextButton", {
+				FontFace = Library.Font,
+				Text = tostring(v),
+				Name = tostring(v),
+				TextColor3 = "Text_dark",
+				TextSize = Library.FontSize,
+				TextStrokeTransparency = 1,
+				TextXAlignment = Enum.TextXAlignment.Left,
+				Active = false,
+				BackgroundTransparency = 1,
+				BorderSizePixel = 0,
+				Selectable = false,
+				Size = UDim2.new(1, 0, 0, 20),
+				ZIndex = 3,
+				Parent = optionContainer
+				}, {
+			Utility:Render("UIPadding", {
+				PaddingLeft = UDim.new(0, 4),
+				})
+			})
+			Utility:Signal(OptionButton.MouseButton1Down,function() 
+			if Dropdown.Default ~= v then 
+				Dropdown.Default = v 
+				end
+				end)
+		end
+		--	Dropdown.Default = ""
+
+	end
+	function Dropdown.Clear(self)
+		for Index, Option in pairs(optionContainer:GetChildren()) do
+			if Option:IsA("TextButton") then Option:Destroy() end
+		end
+		table.clear(self.Options)
+		Dropdown.Default = ""
+	end
+	Dropdown:GetPropertyChangedSignal("Default"):Connect(function(option)
+		Library.Flags[Dropdown.Flag] = option
+		optionselectedtext.Text = tostring(option)
+		pcall(Dropdown.Callback,option)
+		for i, v in pairs(optionContainer:GetChildren()) do
+			if v.Name == option and v:IsA("TextButton") then
+				ts:Create(v, TweenInfo.new(0.8, Enum.EasingStyle.Exponential),
+						{TextColor3 = Utility.Theme.Accent}):Play()
+				Utility:UpdateObject(v, "TextColor3", "Accent")
+
+			end
+		end
+		for i, v in pairs(optionContainer:GetChildren()) do
+			if v.Name ~= option and v:IsA("TextButton") then
+
+				ts:Create(v, TweenInfo.new(0.8, Enum.EasingStyle.Exponential),
+						{TextColor3 = Utility.Theme.Text_dark}):Play()
+				Utility:UpdateObject(v, "TextColor3", "Text_dark")
+
+			end
+		end
+	end)
+
+	Dropdown:GetPropertyChangedSignal("Opened"):Connect(function(value)
+			if value then
+
+				arrow.Text = "-"
+				arrow.TextColor3 = Utility.Theme.Text_light
+				dropdownTitle.TextColor3 = Utility.Theme.Text_light
+				noclickdetector.Visible = true;
+				Library.Elementsopened[noclickdetector] = true;
+			else
+				arrow.Text = "+"
+				arrow.TextColor3 = Utility.Theme.Text_dark
+				dropdownTitle.TextColor3 = Utility.Theme.Text_dark
+				noclickdetector.Visible = false;
+				Library.Elementsopened[noclickdetector] = nil;
+			end
+		end)
+
+	Utility:Signal(DropdownDetector.MouseButton1Down, function()
+		if not Utility:MouseIsOverOpenedFrame() then
+			Dropdown.Opened = not Dropdown.Opened
+		end
+	end)
+
+
+	Utility:Signal(UserInputService.InputBegan,function(Input)
+		if Input.UserInputType == Enum.UserInputType.MouseButton1 then
+			local AbsPos, AbsSize = noclickdetector.AbsolutePosition,
+									noclickdetector.AbsoluteSize;
+
+			if Mouse.X < AbsPos.X or Mouse.X > AbsPos.X + AbsSize.X or Mouse.Y <
+				(AbsPos.Y - 20 - 1) or Mouse.Y > AbsPos.Y + AbsSize.Y then
+
+				Dropdown.Opened = false
+			end
+		end
+	end);
+
+	function Dropdown:OnChanged(thread)
+		Dropdown.Changed = thread
+		thread(Dropdown.Default)
+	end
+	Dropdown:AddOption(Dropdown.Options)
+	Dropdown.Default = Dropdown.Default
+	Library.Elements[#Library.Elements + 1] = Dropdown
+	return Dropdown
+end
+function Sections:Input(Properties)
+local properties = Properties or {}
+
+local Input = Utility:GetType(properties, {}, "table", true)
+Input.Title = Utility:GetType(Input.Title, "Input", "string")	
+Input.Placeholdertext = Utility:GetType(Input.Placeholdertext, "Input here!", "string")		
+Input.Flag = Utility:GetType(Input.Flag, Input.Title, "string")
+Input.Default = Utility:GetType(Input.Default, "", "string")
+Input.Callback = Utility:GetType(Input.Callback,function()end,"function")
+
+
+local InputFrame = Utility:Render("Frame", {
+	BackgroundTransparency = 1,
+	BorderSizePixel = 0,
+	BackgroundColor3 = "LightContrast",
+	Position = UDim2.new(0, 0, 0.2, 0),
+	Size = UDim2.new(1, 0, 0, 34),
+	Parent = self.sectionframe
+})
+local inputtitle = Utility:Render("TextLabel", {
+	FontFace = Library.Font,
+	Text = Input.Title,
+	TextColor3 = "Text_dark",
+	TextSize = Library.FontSize,
+	TextXAlignment = Enum.TextXAlignment.Left,
+	TextYAlignment = Enum.TextYAlignment.Top,
+	BackgroundTransparency = 1,
+	BorderSizePixel = 0,
+	Size = UDim2.new(0, 40, 1, 0),
+	Parent = InputFrame
+
+})
+
+local textinputframe = Utility:Render("Frame", {
+	AnchorPoint = Vector2.new(0, 1),
+	BackgroundColor3 = "ComponentBackground",
+	BorderSizePixel = 1,
+	BorderColor3 = "Outline",
+	Position = UDim2.new(0, 0, 1, 0),
+	Size = UDim2.new(1, 0, 0, 16),
+	Parent = InputFrame
+})
+
+
+
+
+local uIPadding = Utility:Render("UIPadding", {
+	PaddingLeft = UDim.new(0, 4),
+	Parent = textinputframe
+})
+
+local textinputbox = Utility:Render("TextBox", {
+	FontFace = Library.Font,
+	PlaceholderText = Input.Placeholdertext,
+	TextColor3 = "Text_dark",
+	TextSize = Library.FontSize,
+	TextWrapped = true,
+	TextDirection = Enum.TextDirection.LeftToRight,
+	Text = "",
+	TextXAlignment = Enum.TextXAlignment.Left,
+	Active = false,
+	BackgroundTransparency = 1,
+	BorderSizePixel = 0,
+	Selectable = false,
+	Size = UDim2.new(0.5, 0, 1, 0),
+	Parent = textinputframe
+})
+
+
+local uIPadding1 = Utility:Render("UIPadding", {
+	PaddingLeft = UDim.new(0, 8),
+	PaddingRight = UDim.new(0, 8),
+	Parent = InputFrame
+})
+
+function Input:Set(Text)
+	Input.Callback(Text)
+	Library.Flags[Input.Flag] = Text
+
+end
+function Input:OnChanged(thread)
+	Input.Changed = thread
+	thread(Input.Value)
+end
+function Input:Get()
+	return Input.Value
+end
+Input:GetPropertyChangedSignal("Value"):Connect(function(value)
+	Input:Set(value)
+	textinputbox.Text = value
+end)
+Utility:Signal(textinputbox.Focused, function()
+	ts:Create(textinputbox,TweenInfo.new(0.5,Enum.EasingStyle.Exponential), {TextColor3 = Utility.Theme.Text_light}):Play()
+	ts:Create(inputtitle,TweenInfo.new(0.5,Enum.EasingStyle.Exponential), {TextColor3 = Utility.Theme.Text_light}):Play()
+
+end)
+
+Utility:Signal(textinputbox.FocusLost, function()
+	ts:Create(textinputbox,TweenInfo.new(0.5,Enum.EasingStyle.Exponential), {TextColor3 = Utility.Theme.Text_dark}):Play()
+	ts:Create(inputtitle,TweenInfo.new(0.5,Enum.EasingStyle.Exponential), {TextColor3 = Utility.Theme.Text_dark}):Play()
+
+	Input.Default = textinputbox.Text
+end)
+Library.Elements[#Library.Elements + 1] = Input
+
+return Input
+
+end
+function Sections:Slider(Properties)
+	local properties = Properties or {}
+	local Slider = Utility:GetType(properties, {}, "table", true)
+	Slider.Title = Utility:GetType(Slider.Title, "slider", "string")
+	Slider.suffix = Utility:GetType(Slider.suffix,"","string")
+	Slider.Max = Utility:GetType(Slider.Max, 100, "number")
+	Slider.Flag = Utility:GetType(Slider.Flag, Slider.Title, "string")
+	Slider.Min = Utility:GetType(Slider.Min, 0, "number")
+	Slider.Default = Utility:GetType(Slider.Default, 1, "number")
+	Slider.Increment = Utility:GetType(Slider.Increment, 1, "number")
+	Slider.Callback = Utility:GetType(Slider.Callback, function() end,
+									  "function")
+	local Increment = 1 / Slider.Increment
+
+	local sliderframe = Utility:Render("Frame", {
+		BackgroundColor3 = "LightContrast",
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		Size = UDim2.new(1, 0, 0, 30),
+		Parent = self.sectionframe
+	  })
+		local sliderbar = Utility:Render("Frame", {
+		  AnchorPoint = Vector2.new(0, 1),
+		  BackgroundColor3 = "ComponentBackground",
+		  BorderColor3 = "Outline",
+		  Position = UDim2.new(0, 0, 1, 0),
+		  Size = UDim2.new(1, 0, 0, 14),
+		  Parent = sliderframe
+		})
+		 local sliderindicator = Utility:Render("Frame", {
+			BackgroundColor3 = "Accent",
+			BorderSizePixel = 0,
+			Size = UDim2.new(0.462, 50, 1, 0),
+			Parent = sliderbar
+		  })
+			local sliderValue = Utility:Render("TextLabel", {
+			  FontFace = Library.Font,
+			  TextColor3 = "Text_light",
+			  TextSize = Library.FontSize,
+			  TextXAlignment = Enum.TextXAlignment.Right,
+			  AnchorPoint = Vector2.new(1, 0),
+			  BackgroundTransparency = 1,
+			  BorderSizePixel = 0,
+			  Position = UDim2.new(1, 0, 0, 0),
+			  Size = UDim2.new(1, 0, 1, 0),
+			  Parent = sliderindicator
+			})
+		  
+		
+	  
+		local uIPadding = Utility:Render("UIPadding", {
+		  PaddingLeft = UDim.new(0, 8),
+		  PaddingRight = UDim.new(0, 8),
+		  Parent = sliderframe
+		})
+	  
+		local slidertitle = Utility:Render("TextLabel", {
+		  FontFace = Library.Font,
+		  TextColor3 = "Text_dark",
+		  Text = Slider.Title,
+		  TextSize = Library.FontSize,
+		  TextXAlignment = Enum.TextXAlignment.Left,
+		  TextYAlignment = Enum.TextYAlignment.Top,
+		  BackgroundTransparency = 1,
+		  BorderSizePixel = 0,
+		  Size = UDim2.new(1, 0, 0.688, 0),
+		  Parent = sliderframe
+		})
+		local SliderDetector = Utility:Render("TextButton", {
+			FontFace = Font.new("rbxasset://fonts/families/SourceSansPro.json"),
+			TextSize = 14,
+			Text = "",
+			BackgroundTransparency = 1,
+			BorderSizePixel = 0,
+			Size = UDim2.new(1, 0, 1, 0),
+			Parent = sliderframe
+		})
+
+		Slider:GetPropertyChangedSignal("Default"):Connect(function(val)
+			Library.Flags[Slider.Flag] = val
+			local Value = math.clamp(math.round(val * Increment) / Increment,
+									 Slider.Min, Slider.Max)
+			sliderValue.Text = tostring(val) .. Slider.suffix
+			local percent = 1 - (Slider.Max - val) / (Slider.Max - Slider.Min)
+			ts:Create(sliderindicator, TweenInfo.new(0.2, Enum.EasingStyle.Sine,
+											   Enum.EasingDirection.Out),
+					  {Size = UDim2.new(percent, 0, 1, 0)}):Play()
+			Slider.Callback(Value)
+		end)
+
+		Slider.Default = Slider.Default
+	function Slider:OnChanged(thread)
+		Slider.Changed = thread
+		thread(Slider.Default)
+	end
+	function Slider:Move()
+		local percent = math.clamp(Mouse.X - sliderindicator.AbsolutePosition.X, 0,
+								   sliderbar.AbsoluteSize.X) /
+								   sliderbar.AbsoluteSize.X
+		local Svalue = math.floor((Slider.Min + (Slider.Max - Slider.Min) *
+									  percent) * Increment) / Increment
+		Svalue = math.clamp(Svalue, Slider.Min, Slider.Max)
+		Slider.Default = Svalue
+	end
+	Utility:Signal(SliderDetector.MouseButton1Down,function()
+
+		while UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) do
+			task.wait()
+			Slider:Move()
+		end
+	end)
+	Utility:Signal(SliderDetector.MouseEnter,function()
+	slidertitle.TextColor3 = Utility.Theme.Text_light
+	sliderbar.BorderColor3 = Utility.Theme.Accent
+	end)
+	Utility:Signal(SliderDetector.MouseLeave,function()
+	slidertitle.TextColor3 = Utility.Theme.Text_dark
+	sliderbar.BorderColor3 = Utility.Theme.Outline
+	end)
+	Library.Elements[#Library.Elements + 1] = Slider
+	return Slider
+end
+local window = Library:Window({Title = "zin.pub"})
+
+--> tabs <--
+local Main_tab = window:Tab({Title = "Main", Icon ="rbxassetid://10709783474"})
+local Visuals_tab = window:Tab({Title = "Visuals", Icon = "rbxassetid://15150195001"})
+local Misc_tab = window:Tab({Title = "Misc", Icon ="rbxassetid://10709818847"})
+local Settings_tab = window:Tab({Title = "Settings", Icon ="rbxassetid://10734950309"})
+
+--> sections <--
+local Configs = Settings_tab:Section({Title = "Configuration",Side = "Left"})
+
+local ThemeSection = Settings_tab:Section({Title = "Theme"})
+local ESP_section = Visuals_tab:Section({Title = "ESP",Side = "Left"})
+
+--> elements <--
+
+local foldername = Library.Folder
+local ConfigList = Configs:Dropdown({Title = "Config list",Flag = "List_of_Configs",Callback = function(e)
+
+end,})
+function Updateconfiglist()
+	ConfigList:Clear()
+	ConfigList:AddOption(window:Getlistofconfigs(foldername))
+	
+end;Updateconfiglist()
+Configs:Button({Title = "Refresh Config List", Callback = Updateconfiglist()})
+
+local confignameinput = Configs:Input({Title = "Config Name", Placeholdertext =  "Config Name"})
+
+	Configs:Button({Title = "Create file", Callback = function()
+		window:SaveConfig(foldername, confignameinput.Default)
+		Updateconfiglist()
+
+	end,})
+	Configs:Button({Title = "Save", Callback = function()
+		--if table.find(ConfigList.Options,ConfigList.Value) then
+		window:SaveConfig(foldername, ConfigList.Default)
+		Updateconfiglist()
+
+--	end
+	end,})
+	Configs:Button({Title = "Load", Callback = function()
+		--if table.find(ConfigList.Options,ConfigList.Value) then
+		window:LoadConfig(foldername, ConfigList.Default)
+		Updateconfiglist()
+
+	--end
+	end,})
+	Configs:Button({Title = "Delete", Callback = function()
+		--if table.find(ConfigList.Options,ConfigList.Value) then
+		window:DeleteConfig(foldername, ConfigList.Default)
+		Updateconfiglist()
+
+--	end
+	end,})
+
+local Accent_colorpicker = ThemeSection:Colorpicker({Title = "Accent",Default = Utility.Theme.Accent,Callback = function(Color)
+Utility:SetTheme("Accent", Color)
+end})
+local Background_colorpicker = ThemeSection:Colorpicker({Title = "Background",Default = Utility.Theme.Background,Callback = function(Color)
+Utility:SetTheme("Background", Color)
+end})
+local Outline_colorpicker = ThemeSection:Colorpicker({Title = "Outline",Default = Utility.Theme.Outline,Callback = function(Color)
+Utility:SetTheme("Outline", Color)
+end})
+local lightcontrast_colorpicker = ThemeSection:Colorpicker({Title = "Light Contrast",Default = Utility.Theme.LightContrast,Callback = function(Color)
+Utility:SetTheme("LightContrast", Color)
+end})
+local componentbg_colorpicker = ThemeSection:Colorpicker({Title = "Component Background",Default = Utility.Theme.ComponentBackground,Callback = function(Color)
+Utility:SetTheme("ComponentBackground", Color)
+end})
+local lightxt_colorpicker = ThemeSection:Colorpicker({Title = "Light Text",Default = Utility.Theme.Text_light,Callback = function(Color)
+Utility:SetTheme("Text_light", Color)
+end})
+local darktxt_colorpicker = ThemeSection:Colorpicker({Title = "Dark Text",Default = Utility.Theme.Text_dark,Callback = function(Color)
+Utility:SetTheme("Text_dark", Color)
+end})
+
+local Theme_dropdown = ThemeSection:Dropdown({Title = "Theme Presets",Flag = "Theme_dropdown",Options = {"Default","Neverlose","Fatality","Tokyo Night","Interwebz","Dracula"}})
+ThemeSection:Button({Title = "Load theme", Callback = function()
+	-- i can optimize but ykw im keeping it like this
+	if Theme_dropdown.Default == "Tokyo Night" then
+		Accent_colorpicker.Default = color3RGB(103,89,179)
+		Background_colorpicker.Default = color3RGB(22,22,31)
+		lightcontrast_colorpicker.Default =color3RGB(22,22,31)
+		componentbg_colorpicker.Default =color3RGB(24,25,37)
+		Outline_colorpicker.Default =color3RGB(66, 66, 66)
+		lightxt_colorpicker.Default = color3RGB(255,255,255)
+		darktxt_colorpicker.Default = color3RGB(144,144,144)
+
+		elseif Theme_dropdown.Default == "Default" then
+
+		Accent_colorpicker.Default = color3RGB(71, 169, 221)
+		Background_colorpicker.Default =color3RGB(13, 13, 14)
+		lightcontrast_colorpicker.Default =color3RGB(17, 17, 18)
+		Outline_colorpicker.Default =color3RGB(50, 50, 50)
+		lightxt_colorpicker.Default = color3RGB(255,255,255)
+		darktxt_colorpicker.Default = color3RGB(144,144,144)
+		componentbg_colorpicker.Default =color3RGB(32, 31, 32)
+	
+		elseif Theme_dropdown.Default == "Interwebz" then
+
+		Accent_colorpicker.Default = Color3.fromHex("c9654b")
+		Background_colorpicker.Default =Color3.fromHex("1f162b")
+		lightcontrast_colorpicker.Default =Color3.fromHex("291f38")
+		Outline_colorpicker.Default =Color3.fromHex('3c384d')
+		lightxt_colorpicker.Default = Color3.fromHex('fcfcfc')
+		darktxt_colorpicker.Default = Color3.fromHex('a8a8a8')
+		componentbg_colorpicker.Default =Color3.fromHex("1f162b")
+		
+		elseif Theme_dropdown.Default == "Fatality" then
+
+		Accent_colorpicker.Default = Color3.fromHex("f00f50")
+		Background_colorpicker.Default =Color3.fromHex("191432")
+		lightcontrast_colorpicker.Default =Color3.fromHex("231946")
+		Outline_colorpicker.Default =Color3.fromHex('0f0f28')
+		lightxt_colorpicker.Default = Color3.fromHex('c8c8ff')
+		darktxt_colorpicker.Default = Color3.fromHex('afafaf')
+		componentbg_colorpicker.Default =Color3.fromHex("191432")
+
+		elseif Theme_dropdown.Default == "Neverlose" then
+
+		Accent_colorpicker.Default = Color3.fromHex("00b4f0")
+		Background_colorpicker.Default =Color3.fromHex("050514")
+		lightcontrast_colorpicker.Default = Color3.fromHex("000f1e")
+		Outline_colorpicker.Default =Color3.fromHex('000005')
+		lightxt_colorpicker.Default = Color3.fromHex('ffffff')
+		darktxt_colorpicker.Default = Color3.fromHex('afafaf')
+		componentbg_colorpicker.Default =Color3.fromHex("050514")
+
+		elseif Theme_dropdown.Default == "Dracula" then
+
+		Accent_colorpicker.Default = Color3.fromHex("9a81b3")
+		Background_colorpicker.Default =Color3.fromHex("252730")
+		lightcontrast_colorpicker.Default =Color3.fromHex("2a2c38")
+		Outline_colorpicker.Default =Color3.fromHex('40364f')
+		lightxt_colorpicker.Default = Color3.fromHex('b4b4b8')
+		darktxt_colorpicker.Default = Color3.fromHex('88888b')
+		componentbg_colorpicker.Default =Color3.fromHex("252730")
+	end
+end})
+ESP_section:Slider({Title = "Slider", Flag = "Visuals/ESP/Slider"})
+
+ESP_section:Toggle({Title = "Enable", Flag = "Visuals/ESP/Enable"})
+ESP_section:Keybind({Title = "Keybind"})
+ESP_section:Dropdown({Title = "Flags", Options = {"Weapon","Health","IsWalking"}})
+ESP_section:Button({Title = "Button"})
+ESP_section:Colorpicker({Title = "Box Color"})
+
+window:Initialize()
